@@ -14,15 +14,15 @@ import (
 func main() {
 	// loading data
 	time := ngo.Linspace(0.0, 39.99, 4000)
-	data := solver.LoadFromFile("data.csv")
-	derivativeData := solver.LoadFromFile("derivative.csv")
+	data := solver.LoadFromFile("solver/dataset/data.csv")
+	derivativeData := solver.LoadFromFile("solver/dataset/derivative.csv")
 
 	// training dimension
 	trainingDim := int(0.25 * float64(len(time)))
 
 	//split data into training and testing dataset
-	xTrain, xTest := solver.Split(data, 0.25)
-	yTrain, yTest := solver.Split(derivativeData, 0.25)
+	xTrain, xTest := ngo.Split(data, 0.25)
+	yTrain, yTest := ngo.Split(derivativeData, 0.25)
 
 	// input and output features
 	inputDim := xTrain.RawMatrix().Rows
@@ -46,12 +46,13 @@ func main() {
 	fmt.Printf("training dataset error: %.6e\n", model.Evaluate(xTrain, yTrain))
 	fmt.Printf("testing dataset error:  %.6e\n", model.Evaluate(xTest, yTest))
 
-	// saves neural network model to file
-	model.Save("neuralnetwork.json")
-
-	// integrating the predictions
-	x0 := mat.Col(nil, 0, xTrain)
-	integratedPred := solver.SolveRK4(model, x0, len(time), time[1]-time[0])
+	// temporal integration for predictions
+	integratedPred := solver.SolveRK4(solver.Parameters{
+		Func: model.Predict,
+		X0:   mat.Col(nil, 0, xTrain),
+		Tmax: time[len(time)-1],
+		Step: time[1] - time[0],
+	})
 
 	// mean squared error
 	metric := ngo.Scale(1./float64(data.RawMatrix().Cols),
