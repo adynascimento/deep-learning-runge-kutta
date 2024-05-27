@@ -1,7 +1,7 @@
 package main
 
 import (
-	"deep_learning/solver"
+	"runge-kutta/solver"
 	"fmt"
 	"strconv"
 

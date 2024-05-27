@@ -1,4 +1,4 @@
-module deep_learning
+module runge-kutta
 
 go 1.22
 
@@ -6,7 +6,7 @@ toolchain go1.22.2
 
 require (
 	github.com/adynascimento/deep-learning v1.0.2
-	github.com/adynascimento/plot v1.0.5
+	github.com/adynascimento/plot v1.2.0
 	gonum.org/v1/gonum v0.14.0
 )
 

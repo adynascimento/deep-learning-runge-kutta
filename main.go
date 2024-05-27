@@ -1,12 +1,12 @@
 package main
 
 import (
-	"deep_learning/solver"
+	"runge-kutta/solver"
 	"fmt"
 
 	ngo "github.com/adynascimento/deep-learning/gonum"
 	network "github.com/adynascimento/deep-learning/neuralnetwork"
-	"github.com/adynascimento/plot/plot"
+	"github.com/adynascimento/plot/plotter"
 
 	"gonum.org/v1/gonum/mat"
 )
@@ -61,17 +61,30 @@ func main() {
 	fmt.Printf("%.6e\n", mat.Formatted(metric))
 
 	// plotting
-	plt := plot.NewPlot()
-	plt.FigSize(12, 9)
+	plt := plotter.NewSubplot(1, 2)
+	plt.FigSize(23, 10)
 
-	plt.Plot(time, mat.Row(nil, 0, data))
-	plt.Plot(time, mat.Row(nil, 0, integratedPred))
-	plt.Plot(ngo.Linspace(time[trainingDim], time[trainingDim], 10), ngo.Linspace(-2.0, 2.0, 10))
-	plt.Title("neural network predictions")
-	plt.XLabel("x values")
-	plt.YLabel("y values")
-	plt.Legend("analytical model", "model prediction", "end of training window")
-	plt.XLim(0.0, 40.0)
+	subplt := plt.Subplot(0, 0)
+	subplt.Plot(time, mat.Row(nil, 0, data))
+	subplt.Plot(time, mat.Row(nil, 0, integratedPred))
+	subplt.Plot(ngo.Linspace(time[trainingDim], time[trainingDim], 10), ngo.Linspace(-2.0, 2.0, 10))
+	subplt.Title("neural network predictions")
+	subplt.XLabel("t values")
+	subplt.YLabel("x1")
+	subplt.Legend("analytical model", "model prediction", "end of training window")
+	subplt.XLim(0.0, 40.0)
+	subplt.Grid()
+
+	subplt = plt.Subplot(0, 1)
+	subplt.Grid()
+	subplt.Plot(time, mat.Row(nil, 1, data))
+	subplt.Plot(time, mat.Row(nil, 1, integratedPred))
+	subplt.Plot(ngo.Linspace(time[trainingDim], time[trainingDim], 10), ngo.Linspace(-2.0, 2.0, 10))
+	subplt.Title("neural network predictions")
+	subplt.XLabel("t values")
+	subplt.YLabel("x2")
+	subplt.Legend("analytical model", "model prediction", "end of training window")
+	subplt.XLim(0.0, 40.0)
 
 	plt.Save("plot.png")
 }
