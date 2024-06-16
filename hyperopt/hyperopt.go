@@ -1,13 +1,13 @@
 package main
 
 import (
-	"runge-kutta/solver"
 	"fmt"
+	"runge-kutta/solver"
 	"strconv"
 
-	ngo "github.com/adynascimento/deep-learning/gonum"
 	"github.com/adynascimento/deep-learning/hyperopt"
 	network "github.com/adynascimento/deep-learning/neuralnetwork"
+	"github.com/adynascimento/deep-learning/ngo"
 )
 
 func main() {
