@@ -1,80 +1,90 @@
 package main
 
 import (
-	"deep_learning/plot"
 	"fmt"
+	"runge-kutta/solver"
 
-	network "deep_learning/neuralNetwork"
-	ngo "deep_learning/numeric"
+	network "github.com/adynascimento/deep-learning/neuralnetwork"
+	"github.com/adynascimento/deep-learning/ngo"
+	"github.com/adynascimento/plot/plotter"
 
-	"gonum.org/v1/gonum/floats"
 	"gonum.org/v1/gonum/mat"
 )
 
 func main() {
-
 	// loading data
-	time, data := ngo.ReadData("data.txt")
-	derivativeData := ngo.ReadDerivativeData("derivative.txt")
+	time := ngo.Linspace(0.0, 39.99, 4000)
+	data := solver.LoadFromFile("solver/dataset/data.csv")
+	derivativeData := solver.LoadFromFile("solver/dataset/derivative.csv")
 
 	// training dimension
-	training_dim := int(0.25 * float64(len(time)))
+	trainingDim := int(0.25 * float64(len(time)))
 
-	// training data
-	inputData := mat.NewDense(len(data), training_dim, nil)
-	outputData := mat.NewDense(len(derivativeData), training_dim, nil)
-	for i := 0; i < inputData.RawMatrix().Rows; i++ {
-		inputData.SetRow(i, data[i][:training_dim])
-		outputData.SetRow(i, derivativeData[i][:training_dim])
-	}
+	//split data into training and testing dataset
+	xTrain, xTest := ngo.Split(data, 0.25)
+	yTrain, yTest := ngo.Split(derivativeData, 0.25)
 
 	// input and output features
-	input_dim := inputData.RawMatrix().Rows
-	output_dim := outputData.RawMatrix().Rows
-
-	// hyperparameters
-	nn_structure := []int{input_dim, 45, output_dim} // neural network structure
-	activation_function := network.ActivationTanh    // activation function
-	l2_regularization := 1.40e-06                    // regularization parameter
-	num_iterations := 20000                          // number of iterations
+	inputDim := xTrain.RawMatrix().Rows
+	outputDim := yTrain.RawMatrix().Rows
 
 	// neural network model
-	model := network.NewNeuralNetwork(
-		nn_structure,
-		activation_function,
-		l2_regularization,
-		num_iterations,
-	)
+	neural := network.NewNeuralNetwork(network.NeuralConfig{
+		NNStructure: []int{inputDim, 45, outputDim}, // neural network structure
+		Activation:  network.TanhActivation,         // activation function
+		Mode:        network.ModeRegression,         // mode determines output layer activation and loss function
+	})
 
 	// optimizer to train the model
-	learning_rate := 0.001
-	model.NewTrainer(network.AdamOptimizer, learning_rate)
-	model.Fit(inputData, outputData, true)
+	model := neural.NewTrainer(network.TrainerConfig{
+		Optimizer:        network.AdamOptimizer,
+		LearningRate:     0.001,
+		L2Regularization: 1.40e-06,
+		NIterations:      20000,
+	})
+	model.Fit(xTrain, yTrain, true)
+	fmt.Printf("training dataset error: %.6e\n", model.Evaluate(xTrain, yTrain))
+	fmt.Printf("testing dataset error:  %.6e\n", model.Evaluate(xTest, yTest))
 
-	// saves neural network model to file
-	model.Save("savedModel.json")
+	// temporal integration for predictions
+	integratedPred := solver.SolveRK4(solver.Parameters{
+		Func: model.Predict,
+		X0:   mat.Col(nil, 0, xTrain),
+		Tmax: time[len(time)-1],
+		Step: time[1] - time[0],
+	})
 
-	// make predictions
-	x0 := ngo.GetCol(inputData, 0)
-	predictions := model.SolveRK4(x0, len(time), 0.01)
-
-	// L2 error
-	error := floats.Norm(ngo.SubSlices(data[0], predictions.RawRowView(0)), 2.0) / floats.Norm(data[0], 2.0)
-	fmt.Printf("\nextrapolation error: %f %% \n", 100.0*error)
+	// mean squared error
+	metric := ngo.Scale(1./float64(data.RawMatrix().Cols),
+		ngo.Sum(ngo.Square(ngo.Sub(data, integratedPred)), ngo.OverColumns))
+	fmt.Println("global integration error by feature:")
+	fmt.Printf("%.6e\n", mat.Formatted(metric))
 
 	// plotting
-	plt := plot.NewPlot()
-	plt.FigSize(12, 9)
+	plt := plotter.NewSubplot(1, 2)
+	plt.FigSize(23, 10)
 
-	plt.Plot(time, data[0])
-	plt.Plot(time, predictions.RawRowView(0))
-	plt.Plot(ngo.Linspace(time[training_dim], time[training_dim], 10), ngo.Linspace(-2.0, 2.0, 10))
-	plt.Title("neural network predictions")
-	plt.XLabel("x values")
-	plt.YLabel("y values")
-	plt.Legend("true model", "prediction", "end of training window")
-	plt.XLim(0.0, 40.0)
+	subplt := plt.Subplot(0, 0)
+	subplt.Plot(time, mat.Row(nil, 0, data))
+	subplt.Plot(time, mat.Row(nil, 0, integratedPred))
+	subplt.Plot(ngo.Linspace(time[trainingDim], time[trainingDim], 10), ngo.Linspace(-2.0, 2.0, 10))
+	subplt.Title("neural network predictions")
+	subplt.XLabel("t values")
+	subplt.YLabel("x1")
+	subplt.Legend("analytical model", "model prediction", "end of training window")
+	subplt.XLim(0.0, 40.0)
+	subplt.Grid()
+
+	subplt = plt.Subplot(0, 1)
+	subplt.Grid()
+	subplt.Plot(time, mat.Row(nil, 1, data))
+	subplt.Plot(time, mat.Row(nil, 1, integratedPred))
+	subplt.Plot(ngo.Linspace(time[trainingDim], time[trainingDim], 10), ngo.Linspace(-2.0, 2.0, 10))
+	subplt.Title("neural network predictions")
+	subplt.XLabel("t values")
+	subplt.YLabel("x2")
+	subplt.Legend("analytical model", "model prediction", "end of training window")
+	subplt.XLim(0.0, 40.0)
 
 	plt.Save("plot.png")
-
 }
