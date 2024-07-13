@@ -37,11 +37,10 @@ func main() {
 
 	// optimizer to train the model
 	model := neural.NewTrainer(network.TrainerConfig{
-		Optimizer:        network.AdamOptimizer,
-		LearningRate:     0.001,
-		L2Regularization: 1.40e-06,
-		NIterations:      20000,
-	})
+		Optimizer:    network.AdamOptimizer,
+		LearningRate: 0.001,
+		NIterations:  20000},
+		network.WithL2Regularization(1.40e-06))
 	model.Fit(xTrain, yTrain, true)
 	fmt.Printf("training dataset error: %.6e\n", model.Evaluate(xTrain, yTrain))
 	fmt.Printf("testing dataset error:  %.6e\n", model.Evaluate(xTest, yTest))
