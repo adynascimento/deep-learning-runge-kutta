@@ -31,7 +31,7 @@ func main() {
 		model := neural.NewTrainer(network.TrainerConfig{
 			Optimizer:    network.AdamOptimizer, // optimizer
 			LearningRate: params.LearningRate,   // learning rate
-			NIterations:  20000},                // number of iterations
+			Epochs:       20000},                // number of iterations
 			network.WithL2Regularization(params.L2Regularization))
 		model.Fit(xTrain, yTrain, true)
 		model.Save("./trials/networkmodel" + strconv.Itoa(trialID) + ".json")

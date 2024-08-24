@@ -39,7 +39,7 @@ func main() {
 	model := neural.NewTrainer(network.TrainerConfig{
 		Optimizer:    network.AdamOptimizer,
 		LearningRate: 0.001,
-		NIterations:  20000},
+		Epochs:       20000},
 		network.WithL2Regularization(1.40e-06))
 	model.Fit(xTrain, yTrain, true)
 	fmt.Printf("training dataset error: %.6e\n", model.Evaluate(xTrain, yTrain))
@@ -85,5 +85,6 @@ func main() {
 	subplt.Legend("analytical model", "model prediction", "end of training window")
 	subplt.XLim(0.0, 40.0)
 
+	plt.Show()
 	plt.Save("plot.png")
 }
