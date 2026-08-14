@@ -3,8 +3,8 @@ module runge-kutta
 go 1.25.0
 
 require (
-	github.com/adynascimento/deep-learning v1.4.0
-	github.com/adynascimento/plot v1.4.1
+	github.com/adynascimento/deep-learning v1.6.1
+	github.com/adynascimento/plot v1.5.3
 	gonum.org/v1/gonum v0.14.0
 )
 
@@ -27,11 +27,12 @@ require (
 	github.com/olekukonko/tablewriter v0.0.5 // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
 	github.com/schollz/progressbar/v3 v3.14.4 // indirect
+	golang.org/x/exp v0.0.0-20250408133849-7e4ce0ab07d0 // indirect
 	golang.org/x/exp/shiny v0.0.0-20260603202125-055de637280b // indirect
-	golang.org/x/image v0.40.0 // indirect
-	golang.org/x/net v0.48.0 // indirect
-	golang.org/x/sys v0.44.0 // indirect
-	golang.org/x/term v0.38.0 // indirect
-	golang.org/x/text v0.37.0 // indirect
+	golang.org/x/image v0.43.0 // indirect
+	golang.org/x/net v0.55.0 // indirect
+	golang.org/x/sys v0.45.0 // indirect
+	golang.org/x/term v0.43.0 // indirect
+	golang.org/x/text v0.39.0 // indirect
 	gonum.org/v1/plot v0.11.0 // indirect
 )

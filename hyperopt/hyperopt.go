@@ -6,8 +6,9 @@ import (
 	"strconv"
 
 	"github.com/adynascimento/deep-learning/hyperopt"
-	network "github.com/adynascimento/deep-learning/neuralnetwork"
+	"github.com/adynascimento/deep-learning/mlp"
 	"github.com/adynascimento/deep-learning/ngo"
+	"github.com/adynascimento/deep-learning/nncore"
 )
 
 func main() {
@@ -21,20 +22,22 @@ func main() {
 
 	neuralNetworkModel := func(trialID int, params hyperopt.Params) float64 {
 		// neural network model
-		neural := network.NewNeuralNetwork(network.NeuralConfig{
-			NNStructure: params.NNStructure,     // neural network structure
-			Activation:  network.TanhActivation, // activation function
-			Mode:        network.ModeRegression, // mode determines output layer activation and loss function
+		neural := mlp.NewNeuralNetwork(mlp.NeuralConfig{
+			NNStructure: params.NNStructure,    // neural network structure
+			Activation:  nncore.TanhActivation, // activation function
+			Mode:        nncore.ModeRegression, // mode determines output layer activation and loss function
 		})
 
 		// optimizer to train the model
-		model := neural.NewTrainer(network.TrainerConfig{
-			Optimizer:    network.AdamOptimizer, // optimizer
-			LearningRate: params.LearningRate,   // learning rate
-			Epochs:       20000},                // number of iterations
-			network.WithL2Regularization(params.L2Regularization))
-		model.Fit(xTrain, yTrain, true)
-		model.Save("./trials/networkmodel" + strconv.Itoa(trialID) + ".json")
+		model := neural.NewTrainer(mlp.TrainerConfig{
+			Optimizer:    nncore.AdamOptimizer, // optimizer
+			LearningRate: params.LearningRate,  // learning rate
+			Epochs:       5000},                // number of iterations
+			mlp.WithL2Regularization(params.L2Regularization),
+			mlp.WithSeed(42),
+		)
+		model.Fit(xTrain, yTrain, mlp.WithVerbose(false))
+		model.Save("./trials/model" + strconv.Itoa(trialID) + ".json")
 
 		// make predictions and evaluate model
 		return model.Evaluate(xTest, yTest)
@@ -51,6 +54,6 @@ func main() {
 			NModels:           3,                     // number of models
 		})
 
-	study.RandomSearchOptimization(hyperopt.Minimize, neuralNetworkModel)
+	study.BayesianOptimization(hyperopt.Minimize, neuralNetworkModel)
 	fmt.Println("best params:", study.GetBestParams())
 }
