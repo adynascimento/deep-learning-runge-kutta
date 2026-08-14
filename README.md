@@ -77,44 +77,29 @@ import (
 	"fmt"
 	"runge-kutta/solver"
 
-	network "github.com/adynascimento/deep-learning/neuralnetwork"
+	"github.com/adynascimento/deep-learning/mlp"
+	"github.com/adynascimento/deep-learning/nncore"
 	"github.com/adynascimento/deep-learning/ngo"
 	"github.com/adynascimento/plot/plotter"
-	"gonum.org/v1/gonum/mat"
 )
 
 func main() {
-	// loading data
-	time := ngo.Linspace(0.0, 39.99, 4000)
-	data := solver.LoadFromFile("solver/dataset/data.csv")
-	derivativeData := solver.LoadFromFile("solver/dataset/derivative.csv")
-
-	// training dimension used to mark the training window in the plot
-	trainingDim := int(0.25 * float64(len(time)))
-
-	// split data into training and testing dataset
-	xTrain, xTest := ngo.Split(data, 0.25)
-	yTrain, yTest := ngo.Split(derivativeData, 0.25)
-
-	// input and output features
-	inputDim := xTrain.RawMatrix().Rows
-	outputDim := yTrain.RawMatrix().Rows
-
 	// neural network model
-	neural := network.NewNeuralNetwork(network.NeuralConfig{
+	neural := mlp.NewNeuralNetwork(mlp.NeuralConfig{
 		NNStructure: []int{inputDim, 45, outputDim},
-		Activation:  network.TanhActivation,
-		Mode:        network.ModeRegression,
+		Activation:  nncore.TanhActivation,
+		Mode:        nncore.ModeRegression,
 	})
 
 	// optimizer to train the model
 	model := neural.NewTrainer(network.TrainerConfig{
-		Optimizer:    network.AdamOptimizer,
+		Optimizer:    nncore.AdamOptimizer,
 		LearningRate: 0.001,
-		Epochs:       20000},
-		network.WithL2Regularization(1.40e-06))
+		Epochs:       10000},
+		mlp.WithL2Regularization(1.40e-06),
+	)
 	
-	model.Fit(xTrain, yTrain, true)
+	model.Fit(xTrain, yTrain)
 	fmt.Printf("training dataset error: %.6e\n", model.Evaluate(xTrain, yTrain))
 	fmt.Printf("testing dataset error:  %.6e\n", model.Evaluate(xTest, yTest))
 
@@ -131,41 +116,12 @@ func main() {
 		ngo.Sum(ngo.Square(ngo.Sub(data, integratedPred)), ngo.OverColumns))
 	fmt.Println("global integration error by feature:")
 	fmt.Printf("%.6e\n", mat.Formatted(metric))
-
-	// plotting
-	plt := plotter.NewSubplot(1, 2)
-	plt.FigSize(23, 10)
-
-	subplt := plt.Subplot(0, 0)
-	subplt.Plot(time, mat.Row(nil, 0, data))
-	subplt.Plot(time, mat.Row(nil, 0, integratedPred))
-	subplt.Plot(ngo.Linspace(time[trainingDim], time[trainingDim], 10), ngo.Linspace(-2.0, 2.0, 10))
-	subplt.Title("neural network predictions")
-	subplt.XLabel("t values")
-	subplt.YLabel("x1")
-	subplt.Legend("analytical model", "model prediction", "end of training window")
-	subplt.XLim(0.0, 40.0)
-	subplt.Grid()
-
-	subplt = plt.Subplot(0, 1)
-	subplt.Grid()
-	subplt.Plot(time, mat.Row(nil, 1, data))
-	subplt.Plot(time, mat.Row(nil, 1, integratedPred))
-	subplt.Plot(ngo.Linspace(time[trainingDim], time[trainingDim], 10), ngo.Linspace(-2.0, 2.0, 10))
-	subplt.Title("neural network predictions")
-	subplt.XLabel("t values")
-	subplt.YLabel("x2")
-	subplt.Legend("analytical model", "model prediction", "end of training window")
-	subplt.XLim(0.0, 40.0)
-
-	plt.Show()
-	plt.Save("plot.png")
 }
 ```
 
 Example output plot:
 
-![Neural network RK4 prediction compared with analytical data](bestplot.png)
+![Neural network RK4 prediction compared with analytical data](plot.png)
 
 **Use case**: Surrogate modeling of complex dynamics without explicit knowledge of governing differential equations. Ideal for scientific computing and physics-informed machine learning.
 
@@ -183,35 +139,29 @@ import (
 	"strconv"
 
 	"github.com/adynascimento/deep-learning/hyperopt"
-	network "github.com/adynascimento/deep-learning/neuralnetwork"
+	"github.com/adynascimento/deep-learning/mlp"
+	"github.com/adynascimento/deep-learning/nncore"
 	"github.com/adynascimento/deep-learning/ngo"
 )
 
 func main() {
-	// loading data
-	data := solver.LoadFromFile("../solver/dataset/data.csv")
-	derivativeData := solver.LoadFromFile("../solver/dataset/derivative.csv")
-
-	//split data into training and testing dataset
-	xTrain, xTest := ngo.Split(data, 0.25)
-	yTrain, yTest := ngo.Split(derivativeData, 0.25)
-
 	neuralNetworkModel := func(trialID int, params hyperopt.Params) float64 {
 		// neural network model
-		neural := network.NewNeuralNetwork(network.NeuralConfig{
+		neural := mlp.NewNeuralNetwork(network.NeuralConfig{
 			NNStructure: params.NNStructure,
-			Activation:  network.TanhActivation,
-			Mode:        network.ModeRegression,
+			Activation:  nncore.TanhActivation,
+			Mode:        nncore.ModeRegression,
 		})
 
 		// optimizer to train the model
 		model := neural.NewTrainer(network.TrainerConfig{
-			Optimizer:    network.AdamOptimizer,
+			Optimizer:    nncore.AdamOptimizer,
 			LearningRate: params.LearningRate,
-			Epochs:       20000},
-			network.WithL2Regularization(params.L2Regularization))
-		model.Fit(xTrain, yTrain, true)
-		model.Save("./trials/networkmodel" + strconv.Itoa(trialID) + ".json")
+			Epochs:       10000},
+			mlp.WithL2Regularization(params.L2Regularization),
+		)
+		model.Fit(xTrain, yTrain, mlp.WithVerbose(false))
+		model.Save("./trials/model" + strconv.Itoa(trialID) + ".json")
 
 		// make predictions and evaluate model
 		return model.Evaluate(xTest, yTest)
@@ -237,33 +187,6 @@ func main() {
 
 ---
 
-## 📁 Project Structure
-
-```
-deep-learning-runge-kutta/
-├── main.go                      # Main application: training and prediction pipeline
-├── bestmodel.json               # Example trained neural network model committed with the project
-├── bestplot.png                 # Example plot/output image committed with the project
-├── go.mod                       # Go module dependencies
-├── go.sum                       # Dependency lock/checksum file
-├── README.md                    # This documentation
-│
-├── solver/                      # RK4 solver package with utilities
-│   ├── rungekutta4.go           # 4th-Order Runge-Kutta implementation
-│   ├── utils.go                 # Helper functions (data loading)
-│   └── dataset/                 # Input data directory
-│       ├── data.csv             # System state values (features)
-│       └── derivative.csv       # System derivatives/ODEs
-│
-└── hyperopt/                    # Hyperparameter optimization package
-    ├── hyperopt.go              # Random search optimization
-    └── trials/                  # Saved models from optimization trials
-        ├── networkmodel0.json
-        ├── networkmodel1.json
-        └── networkmodel2.json
-```
-
----
 
 ## 🧾 Dataset Format
 
@@ -398,21 +321,22 @@ derivatives = ngo.Apply(applyNormalization, derivatives)
 ### Network Architecture Customization
 
 ```go
-neural := network.NewNeuralNetwork(network.NeuralConfig{
+neural := mlp.NewNeuralNetwork(mlp.NeuralConfig{
 	NNStructure: []int{inputDim, 64, 32, outputDim},  // adjust hidden layers
-	Activation:  network.TanhActivation,
-	Mode:        network.ModeRegression,
+	Activation:  nncore.TanhActivation,
+	Mode:        nncore.ModeRegression,
 })
 ```
 
 ### Training Parameters
 
 ```go
-model := neural.NewTrainer(network.TrainerConfig{
-	Optimizer:    network.AdamOptimizer,
-	LearningRate: 0.001,      // decrease for stability, increase for speed
-	Epochs:       20000},     // more epochs for better convergence
-	network.WithL2Regularization(1.40e-06))  // increase to prevent overfitting
+model := neural.NewTrainer(mlp.TrainerConfig{
+	Optimizer:    nncore.AdamOptimizer,
+	LearningRate: 0.001,                    // decrease for stability, increase for speed
+	Epochs:       10000},                   // more epochs for better convergence
+	mlp.WithL2Regularization(1.40e-06), // increase to prevent overfitting
+)  
 ```
 
 ### RK4 Integration Control
