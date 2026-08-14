@@ -4,8 +4,9 @@ import (
 	"fmt"
 	"runge-kutta/solver"
 
-	network "github.com/adynascimento/deep-learning/neuralnetwork"
+	"github.com/adynascimento/deep-learning/mlp"
 	"github.com/adynascimento/deep-learning/ngo"
+	"github.com/adynascimento/deep-learning/nncore"
 	"github.com/adynascimento/plot/plotter"
 
 	"gonum.org/v1/gonum/mat"
@@ -29,19 +30,23 @@ func main() {
 	outputDim := yTrain.RawMatrix().Rows
 
 	// neural network model
-	neural := network.NewNeuralNetwork(network.NeuralConfig{
-		NNStructure: []int{inputDim, 45, outputDim}, // neural network structure
-		Activation:  network.TanhActivation,         // activation function
-		Mode:        network.ModeRegression,         // mode determines output layer activation and loss function
+	neural := mlp.NewNeuralNetwork(mlp.NeuralConfig{
+		NNStructure: []int{inputDim, 67, outputDim}, // neural network structure
+		Activation:  nncore.TanhActivation,          // activation function
+		Mode:        nncore.ModeRegression,          // mode determines output layer activation and loss function
 	})
 
 	// optimizer to train the model
-	model := neural.NewTrainer(network.TrainerConfig{
-		Optimizer:    network.AdamOptimizer,
+	model := neural.NewTrainer(mlp.TrainerConfig{
+		Optimizer:    nncore.AdamOptimizer,
 		LearningRate: 0.001,
-		Epochs:       20000},
-		network.WithL2Regularization(1.40e-06))
-	model.Fit(xTrain, yTrain, true)
+		Epochs:       10000},
+		mlp.WithL2Regularization(1.40e-06),
+		mlp.WithSeed(42),
+	)
+	model.Fit(xTrain, yTrain)
+	model.Save("model.json")
+
 	fmt.Printf("training dataset error: %.6e\n", model.Evaluate(xTrain, yTrain))
 	fmt.Printf("testing dataset error:  %.6e\n", model.Evaluate(xTest, yTest))
 
@@ -85,6 +90,6 @@ func main() {
 	subplt.Legend("analytical model", "model prediction", "end of training window")
 	subplt.XLim(0.0, 40.0)
 
-	plt.Show()
 	plt.Save("plot.png")
+	plt.Show()
 }
