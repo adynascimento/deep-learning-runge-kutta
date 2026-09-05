@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"runge-kutta/solver"
 	"strconv"
+	"time"
 
 	"github.com/adynascimento/deep-learning/hyperopt"
 	"github.com/adynascimento/deep-learning/mlp"
@@ -20,10 +21,14 @@ func main() {
 	xTrain, xTest := ngo.Split(data, 0.25)
 	yTrain, yTest := ngo.Split(derivativeData, 0.25)
 
-	neuralNetworkModel := func(trialID int, params hyperopt.Params) float64 {
+	model := func(trialID int, params mlp.Params) float64 {
+		nnStructure := []int{xTrain.RawMatrix().Cols}              // input dimension
+		nnStructure = append(nnStructure, params.HiddenLayers...)  // hidden layers
+		nnStructure = append(nnStructure, yTrain.RawMatrix().Cols) // output dimension
+
 		// neural network model
 		neural := mlp.NewNeuralNetwork(mlp.NeuralConfig{
-			NNStructure: params.NNStructure,    // neural network structure
+			NNStructure: nnStructure,           // neural network structure
 			Activation:  nncore.TanhActivation, // activation function
 			Mode:        nncore.ModeRegression, // mode determines output layer activation and loss function
 		})
@@ -34,7 +39,7 @@ func main() {
 			LearningRate: params.LearningRate,  // learning rate
 			Epochs:       5000},                // number of iterations
 			mlp.WithL2Regularization(params.L2Regularization),
-			mlp.WithSeed(42),
+			mlp.WithSeed(uint64(time.Now().UnixNano())),
 		)
 		model.Fit(xTrain, yTrain, mlp.WithVerbose(false))
 		model.Save("./trials/model" + strconv.Itoa(trialID) + ".json")
@@ -43,17 +48,14 @@ func main() {
 		return model.Evaluate(xTest, yTest)
 	}
 
-	study := hyperopt.NewHyperparameterOptimization(
-		hyperopt.SearchSpace{
-			InputDim:          xTrain.RawMatrix().Rows,
-			OutputDim:         yTrain.RawMatrix().Rows,
-			NLayersRange:      []int{3, 5},           // minimum and maximum number of layers
-			NHiddenRange:      []int{30, 80},         // minimum and maximum number of hidden units per layers
-			LearningRateRange: []float64{1e-4, 1e-2}, // minimum and maximum of learning rate
-			LambdRange:        []float64{1e-6, 1e-2}, // minimum and maximum of regularization parameter
-			NModels:           3,                     // number of models
-		})
+	study := mlp.NewHyperopt(mlp.SearchSpace{
+		NHiddenLayersRange: mlp.IntRange{Min: 1, Max: 3},         // minimum and maximum number of layers
+		NHiddenRange:       mlp.IntRange{Min: 30, Max: 80},       // minimum and maximum number of hidden units per layers
+		LearningRateRange:  mlp.FloatRange{Min: 1e-4, Max: 1e-2}, // minimum and maximum of learning rate
+		L2Range:            mlp.FloatRange{Min: 1e-6, Max: 1e-2}, // minimum and maximum of regularization parameter
+		NTrials:            3,                                    // number of models
+	})
 
-	study.BayesianOptimization(hyperopt.Minimize, neuralNetworkModel)
+	study.Optimize(hyperopt.Bayesian, hyperopt.Minimize, model)
 	fmt.Println("best params:", study.GetBestParams())
 }
