@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"runge-kutta/solver"
+	"time"
 
 	"github.com/adynascimento/deep-learning/mlp"
 	"github.com/adynascimento/deep-learning/ngo"
@@ -14,24 +15,24 @@ import (
 
 func main() {
 	// loading data
-	time := ngo.Linspace(0.0, 39.99, 4000)
+	times := ngo.Linspace(0.0, 39.99, 4000)
 	data := solver.LoadFromFile("solver/dataset/data.csv")
 	derivativeData := solver.LoadFromFile("solver/dataset/derivative.csv")
 
 	// training dimension
-	trainingDim := int(0.25 * float64(len(time)))
+	trainingDim := int(0.25 * float64(len(times)))
 
 	//split data into training and testing dataset
 	xTrain, xTest := ngo.Split(data, 0.25)
 	yTrain, yTest := ngo.Split(derivativeData, 0.25)
 
 	// input and output features
-	inputDim := xTrain.RawMatrix().Rows
-	outputDim := yTrain.RawMatrix().Rows
+	inputDim := xTrain.RawMatrix().Cols
+	outputDim := yTrain.RawMatrix().Cols
 
 	// neural network model
 	neural := mlp.NewNeuralNetwork(mlp.NeuralConfig{
-		NNStructure: []int{inputDim, 67, outputDim}, // neural network structure
+		NNStructure: []int{inputDim, 45, outputDim}, // neural network structure
 		Activation:  nncore.TanhActivation,          // activation function
 		Mode:        nncore.ModeRegression,          // mode determines output layer activation and loss function
 	})
@@ -41,10 +42,11 @@ func main() {
 		Optimizer:    nncore.AdamOptimizer,
 		LearningRate: 0.001,
 		Epochs:       10000},
-		mlp.WithL2Regularization(1.40e-06),
-		mlp.WithSeed(42),
+		mlp.WithBatchSize(xTrain.RawMatrix().Rows),
+		mlp.WithL2Regularization(1.40e-05),
+		mlp.WithSeed(uint64(time.Now().UnixNano())),
 	)
-	model.Fit(xTrain, yTrain)
+	model.Fit(xTrain, yTrain, mlp.WithLogInterval(1000))
 	model.Save("model.json")
 
 	fmt.Printf("training dataset error: %.6e\n", model.Evaluate(xTrain, yTrain))
@@ -53,14 +55,13 @@ func main() {
 	// temporal integration for predictions
 	integratedPred := solver.SolveRK4(solver.Parameters{
 		Func: model.Predict,
-		X0:   mat.Col(nil, 0, xTrain),
-		Tmax: time[len(time)-1],
-		Step: time[1] - time[0],
+		X0:   xTrain.RawRowView(0),
+		Tmax: times[len(times)-1],
+		Step: times[1] - times[0],
 	})
 
 	// mean squared error
-	metric := ngo.Scale(1./float64(data.RawMatrix().Cols),
-		ngo.Sum(ngo.Square(ngo.Sub(data, integratedPred)), ngo.OverColumns))
+	metric := ngo.Scale(1./float64(data.RawMatrix().Rows), ngo.Sum(ngo.Square(ngo.Sub(data, integratedPred)), ngo.OverRows))
 	fmt.Println("global integration error by feature:")
 	fmt.Printf("%.6e\n", mat.Formatted(metric))
 
@@ -68,10 +69,10 @@ func main() {
 	plt := plotter.NewSubplot(1, 2)
 	plt.FigSize(23, 10)
 
-	subplt := plt.Subplot(0, 0)
-	subplt.Plot(time, mat.Row(nil, 0, data))
-	subplt.Plot(time, mat.Row(nil, 0, integratedPred))
-	subplt.Plot(ngo.Linspace(time[trainingDim], time[trainingDim], 10), ngo.Linspace(-2.0, 2.0, 10))
+	subplt := plt.Subplot(1, 1)
+	subplt.Plot(times, mat.Col(nil, 0, data))
+	subplt.Plot(times, mat.Col(nil, 0, integratedPred))
+	subplt.Plot(ngo.Linspace(times[trainingDim], times[trainingDim], 10), ngo.Linspace(-2.0, 2.0, 10))
 	subplt.Title("neural network predictions")
 	subplt.XLabel("t values")
 	subplt.YLabel("x1")
@@ -79,11 +80,11 @@ func main() {
 	subplt.XLim(0.0, 40.0)
 	subplt.Grid()
 
-	subplt = plt.Subplot(0, 1)
+	subplt = plt.Subplot(1, 2)
 	subplt.Grid()
-	subplt.Plot(time, mat.Row(nil, 1, data))
-	subplt.Plot(time, mat.Row(nil, 1, integratedPred))
-	subplt.Plot(ngo.Linspace(time[trainingDim], time[trainingDim], 10), ngo.Linspace(-2.0, 2.0, 10))
+	subplt.Plot(times, mat.Col(nil, 1, data))
+	subplt.Plot(times, mat.Col(nil, 1, integratedPred))
+	subplt.Plot(ngo.Linspace(times[trainingDim], times[trainingDim], 10), ngo.Linspace(-2.0, 2.0, 10))
 	subplt.Title("neural network predictions")
 	subplt.XLabel("t values")
 	subplt.YLabel("x2")
