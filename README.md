@@ -34,7 +34,7 @@ This makes the project useful as a small surrogate-modeling example: the neural 
 - The example trains the network directly on the loaded train split
 
 ### 🔍 Hyperparameter Optimization
-- **Random Search**: Random search over parameter space
+- **Bayesian Optimization** over the hyperparameter space
 - Automatically tunes:
   - Number of hidden layers
   - Number of neurons per layer
@@ -81,6 +81,7 @@ import (
 	"github.com/adynascimento/deep-learning/nncore"
 	"github.com/adynascimento/deep-learning/ngo"
 	"github.com/adynascimento/plot/plotter"
+	"gonum.org/v1/gonum/mat"
 )
 
 func main() {
@@ -92,30 +93,23 @@ func main() {
 	})
 
 	// optimizer to train the model
-	model := neural.NewTrainer(network.TrainerConfig{
+	model := neural.NewTrainer(mlp.TrainerConfig{
 		Optimizer:    nncore.AdamOptimizer,
 		LearningRate: 0.001,
 		Epochs:       10000},
-		mlp.WithL2Regularization(1.40e-06),
+		mlp.WithBatchSize(xTrain.RawMatrix().Rows),
+		mlp.WithL2Regularization(1.40e-05),
 	)
 	
 	model.Fit(xTrain, yTrain)
-	fmt.Printf("training dataset error: %.6e\n", model.Evaluate(xTrain, yTrain))
-	fmt.Printf("testing dataset error:  %.6e\n", model.Evaluate(xTest, yTest))
 
 	// temporal integration for predictions
 	integratedPred := solver.SolveRK4(solver.Parameters{
 		Func: model.Predict,
-		X0:   mat.Col(nil, 0, xTrain),
-		Tmax: time[len(time)-1],
-		Step: time[1] - time[0],
+		X0:   xTrain.RawRowView(0),
+		Tmax: times[len(times)-1],
+		Step: times[1] - times[0],
 	})
-
-	// mean squared error
-	metric := ngo.Scale(1./float64(data.RawMatrix().Cols),
-		ngo.Sum(ngo.Square(ngo.Sub(data, integratedPred)), ngo.OverColumns))
-	fmt.Println("global integration error by feature:")
-	fmt.Printf("%.6e\n", mat.Formatted(metric))
 }
 ```
 
@@ -145,41 +139,38 @@ import (
 )
 
 func main() {
-	neuralNetworkModel := func(trialID int, params hyperopt.Params) float64 {
-		// neural network model
-		neural := mlp.NewNeuralNetwork(network.NeuralConfig{
-			NNStructure: params.NNStructure,
+	model := func(trialID int, params mlp.Params) float64 {
+		nnStructure := []int{xTrain.RawMatrix().Cols}
+		nnStructure = append(nnStructure, params.HiddenLayers...)
+		nnStructure = append(nnStructure, yTrain.RawMatrix().Cols)
+
+		neural := mlp.NewNeuralNetwork(mlp.NeuralConfig{
+			NNStructure: nnStructure,
 			Activation:  nncore.TanhActivation,
 			Mode:        nncore.ModeRegression,
 		})
 
-		// optimizer to train the model
-		model := neural.NewTrainer(network.TrainerConfig{
+		model := neural.NewTrainer(mlp.TrainerConfig{
 			Optimizer:    nncore.AdamOptimizer,
 			LearningRate: params.LearningRate,
-			Epochs:       10000},
+			Epochs:       5000},
 			mlp.WithL2Regularization(params.L2Regularization),
 		)
 		model.Fit(xTrain, yTrain, mlp.WithVerbose(false))
 		model.Save("./trials/model" + strconv.Itoa(trialID) + ".json")
 
-		// make predictions and evaluate model
 		return model.Evaluate(xTest, yTest)
 	}
 
-	study := hyperopt.NewHyperparameterOptimization(
-		hyperopt.SearchSpace{
-			InputDim:          xTrain.RawMatrix().Rows,
-			OutputDim:         yTrain.RawMatrix().Rows,
-			NLayersRange:      []int{3, 5},
-			NHiddenRange:      []int{30, 80},
-			LearningRateRange: []float64{1e-4, 1e-2},
-			LambdRange:        []float64{1e-6, 1e-2},
-			NModels:           3,
-		})
+	study := mlp.NewHyperopt(mlp.SearchSpace{
+		NHiddenLayersRange: mlp.IntRange{Min: 1, Max: 3},
+		NHiddenRange:       mlp.IntRange{Min: 30, Max: 80},
+		LearningRateRange:  mlp.FloatRange{Min: 1e-4, Max: 1e-2},
+		L2Range:            mlp.FloatRange{Min: 1e-6, Max: 1e-2},
+		NTrials:            3,
+	})
 
-	study.RandomSearchOptimization(hyperopt.Minimize, neuralNetworkModel)
-	fmt.Println("best params:", study.GetBestParams())
+	study.Optimize(hyperopt.Bayesian, hyperopt.Minimize, model)
 }
 ```
 
@@ -195,11 +186,13 @@ The included dataset is stored in `solver/dataset/`:
 - `data.csv`: state values of the dynamical system.
 - `derivative.csv`: derivative values associated with each state sample.
 
-Each CSV row represents one time sample, and each column represents one state variable or derivative component. The loader in `solver/utils.go` converts this row-oriented CSV into a Gonum dense matrix with shape:
+Each CSV row represents one time sample, and each column represents one state variable or derivative component. The loader in `solver/utils.go` preserves this layout in a Gonum dense matrix with shape:
 
 ```text
-features x samples
+(nSamples, nFeatures)
 ```
+
+Rows represent time samples and columns represent state variables or derivative components. This is the samples-first convention used by the [`deep-learning`](https://github.com/adynascimento/deep-learning) library.
 
 For the included files, each row has two values. After loading, the model sees a two-dimensional state vector and learns a two-dimensional derivative vector:
 
@@ -211,17 +204,17 @@ dx/dt = [dx1/dt, dx2/dt]
 The main program creates a time grid with:
 
 ```go
-time := ngo.Linspace(0.0, 39.99, 4000)
+times := ngo.Linspace(0.0, 39.99, 4000)
 ```
 
-That means the integration uses the same time interval and time step assumed by the example data. If you replace the dataset, make sure `time`, `Tmax`, and `Step` match the sampling of your own data.
+That means the integration uses the same time interval and time step assumed by the example data. If you replace the dataset, make sure `times`, `Tmax`, and `Step` match the sampling of your own data.
 
 ---
 
 ## 🚀 Installation
 
 ### Prerequisites
-- Go 1.22 or higher
+- Go 1.25 or higher
 - CSV datasets with:
   - Feature matrix file (system state values)
   - Derivative matrix file (corresponding derivatives/temporal changes)
@@ -239,7 +232,12 @@ cd deep-learning-runge-kutta
 go mod tidy
 ```
 
-3. Run hyperparameter optimization from the `hyperopt` directory:
+3. Train the model, integrate the learned dynamics, and generate `plot.png`:
+```bash
+go run .
+```
+
+4. Optionally run hyperparameter optimization from the `hyperopt` directory:
 ```bash
 cd hyperopt
 go run hyperopt.go
@@ -335,7 +333,7 @@ model := neural.NewTrainer(mlp.TrainerConfig{
 	Optimizer:    nncore.AdamOptimizer,
 	LearningRate: 0.001,                    // decrease for stability, increase for speed
 	Epochs:       10000},                   // more epochs for better convergence
-	mlp.WithL2Regularization(1.40e-06), // increase to prevent overfitting
+	mlp.WithL2Regularization(1.40e-05),     // increase to prevent overfitting
 )  
 ```
 
@@ -344,25 +342,22 @@ model := neural.NewTrainer(mlp.TrainerConfig{
 ```go
 integratedPred := solver.SolveRK4(solver.Parameters{
 	Func: model.Predict,
-	X0:   mat.Col(nil, 0, xTrain),
-	Tmax: time[len(time)-1],
-	Step: time[1] - time[0],  // smaller step = higher accuracy, slower computation
+	X0:   xTrain.RawRowView(0),
+	Tmax: times[len(times)-1],
+	Step: times[1] - times[0],  // smaller step = higher accuracy, slower computation
 })
 ```
 
 ### Hyperparameter Search Space
 
 ```go
-study := hyperopt.NewHyperparameterOptimization(
-	hyperopt.SearchSpace{
-		InputDim:          xTrain.RawMatrix().Rows,
-		OutputDim:         yTrain.RawMatrix().Rows,
-		NLayersRange:      []int{3, 5},           // min and max hidden layers
-		NHiddenRange:      []int{30, 80},         // min and max neurons per layer
-		LearningRateRange: []float64{1e-4, 1e-2},
-		LambdRange:        []float64{1e-6, 1e-2},
-		NModels:           10,                    // increase for more thorough search
-	})
+study := mlp.NewHyperopt(mlp.SearchSpace{
+	NHiddenLayersRange: mlp.IntRange{Min: 1, Max: 3},
+	NHiddenRange:       mlp.IntRange{Min: 30, Max: 80},
+	LearningRateRange:  mlp.FloatRange{Min: 1e-4, Max: 1e-2},
+	L2Range:            mlp.FloatRange{Min: 1e-6, Max: 1e-2},
+	NTrials:            10, // increase for a more thorough search
+})
 ```
 
 ---
@@ -376,12 +371,6 @@ study := hyperopt.NewHyperparameterOptimization(
 | Time-series forecasting | Longer training window | Climate model emulation |
 | System identification | Hyperparameter optimization | Unknown dynamical systems |
 | Real-time prediction | Pre-trained model + RK4 | Control system dynamics |
-
----
-
-## 📝 License
-
-This project is licensed under the MIT License. See the LICENSE file for details. All computational code follows standard open-source practices and is provided as-is.
 
 ---
 
